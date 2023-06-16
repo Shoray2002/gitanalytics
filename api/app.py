@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import re
 import requests
 import os
 import tempfile
@@ -11,8 +12,7 @@ from itertools import islice
 import numpy as np
 
 
-EMBEDDING_MODEL = "text-embedding-ada-002"
-EMBEDDING_CTX_LENGTH = 2048
+EMBEDDING_CTX_LENGTH = 3800
 EMBEDDING_ENCODING = "cl100k_base"
 
 
@@ -186,12 +186,10 @@ def chunked_tokens(text, encoding_name, chunk_length):
 
 def len_safe_get_embedding(
     text,
-    model=EMBEDDING_MODEL,
     max_tokens=EMBEDDING_CTX_LENGTH,
     encoding_name=EMBEDDING_ENCODING,
 ):
     chunks = []
-    chunk_lengths = []
     for chunk in chunked_tokens(
         text, encoding_name=encoding_name, chunk_length=max_tokens
     ):
@@ -203,9 +201,8 @@ def len_safe_get_embedding(
 @app.route("/analyze", methods=["GET"])
 def analyze():
     github_url = request.args.get("github_url")
-    temp = preprocess_code(github_url)
-    result = divide_into_chunks(temp)
-    return jsonify({"result": len(result)})
+    result = analyze_repositories(github_url)
+    return jsonify(result)
 
 
 def fetch_repositories(github_url):
@@ -282,7 +279,6 @@ def preprocess_code(repo_url):
 
         for file in files:
             file_path = os.path.join(root, file)
-            print("Reading file:", file_path)
             # Ignore asset files like images and SVGs
             if (
                 not file.lower().endswith(non_code_extensions)
@@ -294,14 +290,17 @@ def preprocess_code(repo_url):
                 ]
                 and not is_binary(file_path)
             ):
+                print("Reading file:", file_path)
                 with open(file_path) as f:
-                    code += f"File: {file}\n"  # Append the file name
+                    code += f"File: {file}\n"
                     code += f.read().strip() + "\n"
-    return code
+    chunks = divide_into_chunks(code)
+    return chunks
 
 
 def divide_into_chunks(code):
     chunks = len_safe_get_embedding(text=code)
+    print("Divided code into", len(chunks), "chunks")
     return chunks
 
 
@@ -312,17 +311,30 @@ def analyze_code_with_gpt(code_chunks):
     # Analyze each code chunk
     for i, code_chunk in enumerate(code_chunks):
         print("Analyzing code chunk: ", i + 1, " out of ", len(code_chunks))
-        prompt = f"Rate the technical complexity of the following Python code on a scale of 1 to 10:\n\n{code_chunk}\n\nRating:"
-        response = openai.Completion.create(
-            engine="text-davinci-002",
-            prompt=prompt,
-            max_tokens=10,
-            n=1,
-            stop=None,
-            temperature=0.5,
+        print("Size of code chunk: ", len(code_chunk))
+        enc = tiktoken.get_encoding(EMBEDDING_ENCODING)
+        chunk_text = enc.decode(code_chunk)
+        prompt = f"{chunk_text}"
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Your job is to rate the technical complexity of the code given by the user on a scale of 1 to 10 and only respond with a number and no extra text whatsoever. Never ever return a statement like 'I don't know' or 'I can't rate this' becaause of error or any other reason. In case of error, just return the number 0.",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
         )
         try:
-            rating = float(response.choices[0].text.strip())
+            print(response.choices[0].message["content"])
+            nums = [
+                int(num)
+                for num in re.findall(r"\d+", response.choices[0].message["content"])
+            ]
+            rating = float(nums[0])
             total_complexity += rating
             analyzed_chunks += 1
         except ValueError:
@@ -338,19 +350,18 @@ def analyze_repositories(github_url):
     max_complexity = -1
     most_complex_repo = None
     gpt_analysis = ""
-
     for repo in repos:
+        print("Analyzing repository: ", repo["name"])
         repo_url = repo["html_url"]
         code_chunks = preprocess_code(repo_url)
         print(len(code_chunks), " code chunks found")
         complexity = analyze_code_with_gpt(code_chunks)
         print("Complexity score of ", repo["name"], ": ", complexity)
-
         if complexity is not None and complexity > max_complexity:
             max_complexity = complexity
             most_complex_repo = repo
-            gpt_analysis = complexity
-
+            gpt_analysis = str(round(complexity, 2))
+        break
     return {
         "most_complex_repository": most_complex_repo["html_url"],
         "gpt_analysis": gpt_analysis,
