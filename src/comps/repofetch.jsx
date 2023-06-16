@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
-
+import "./repofetch.css";
 const FetchPublicRepos = ({ userInput, setData }) => {
   const [publicRepos, setPublicRepos] = useState(0);
   useEffect(() => {
@@ -36,7 +36,7 @@ const FetchPublicRepos = ({ userInput, setData }) => {
   }, [setData, userInput]);
 
   return (
-    <div>
+    <div className="wrapper">
       <h3>Number of Public Repositories:</h3>
       <p>{publicRepos}</p>
     </div>
