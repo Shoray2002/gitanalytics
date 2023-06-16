@@ -39,18 +39,15 @@ function App() {
             </div>
           )}
         </header>
-        {false ? (
+        {/* {false ? (
           <>
             <div className="results">
               <h3>Public Repositories</h3>
-              {/* {data.map((datum, i) => {
-                return <Card key={i} repo={datum} />;
-              })} */}
             </div>
           </>
         ) : (
           <Loader />
-        )}
+        )} */}
       </div>
     </main>
   );
