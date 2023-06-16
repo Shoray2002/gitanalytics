@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 import "./repofetch.css";
-const FetchPublicRepos = ({ userInput, setData }) => {
+const FetchPublicRepos = ({ userInput, setUserDataFetched }) => {
   const [publicRepos, setPublicRepos] = useState(0);
   useEffect(() => {
     const fetchRepos = async () => {
@@ -10,12 +10,12 @@ const FetchPublicRepos = ({ userInput, setData }) => {
 
       if (userInput.startsWith("https://github.com/")) {
         const username = userInput.split("https://github.com/")[1];
-        userUrl = `${baseUrl}${username}/repos?per_page=100`;
+        userUrl = `${baseUrl}${username}`;
       } else if (userInput.startsWith("http://github.com/")) {
         const username = userInput.split("http://github.com/")[1];
-        userUrl = `${baseUrl}${username}/repos?per_page=100`;
+        userUrl = `${baseUrl}${username}`;
       } else {
-        userUrl = `${baseUrl}${userInput}/repos?per_page=100`;
+        userUrl = `${baseUrl}${userInput}`;
       }
 
       try {
@@ -24,8 +24,8 @@ const FetchPublicRepos = ({ userInput, setData }) => {
           throw new Error("Failed to fetch data");
         }
         const data = await response.json();
-        setData(data);
-        setPublicRepos(data.length);
+        setUserDataFetched(true);
+        setPublicRepos(data.public_repos);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -33,13 +33,15 @@ const FetchPublicRepos = ({ userInput, setData }) => {
     if (userInput) {
       fetchRepos();
     }
-  }, [setData, userInput]);
+  }, [setUserDataFetched, userInput]);
 
   return (
-    <div className="wrapper">
-      <h3>Number of Public Repositories:</h3>
-      <p>{publicRepos}</p>
-    </div>
+    publicRepos > 0 && (
+      <div className="wrapper">
+        <h3>Number of Public Repositories:</h3>
+        <p>{publicRepos}</p>
+      </div>
+    )
   );
 };
 

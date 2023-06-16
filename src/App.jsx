@@ -1,20 +1,19 @@
 import { useEffect, useState } from "react";
 import RepoFetch from "./comps/repofetch";
 import Card from "./comps/card";
+import Loader from "./comps/Loader";
 
 function App() {
   const [search, setSearch] = useState("");
   const [repoToFetch, setRepoToFetch] = useState("");
-  const [data, setData] = useState([]);
+  // const [data, setData] = useState([]);
+  const [userDataFetched, setUserDataFetched] = useState(false);
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (search === "") return;
     setRepoToFetch(search);
   };
-  useEffect(() => {
-    console.log(data);
-  }, [data]);
   return (
     <main>
       <div className="App">
@@ -28,13 +27,30 @@ function App() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </form>
-          <RepoFetch userInput={repoToFetch} setData={setData} />
+          <RepoFetch
+            userInput={repoToFetch}
+            setUserDataFetched={setUserDataFetched}
+          />
+          {userDataFetched ? (
+            <div className="analyzeButton">Analyze Repos?</div>
+          ) : (
+            <div className="analyzeButton disabled" onClick={handleSearch}>
+              Fetch User Data
+            </div>
+          )}
         </header>
-        <div className="results">
-          {data.map((datum, i) => {
-            return <Card key={i} repo={datum} />;
-          })}
-        </div>
+        {false ? (
+          <>
+            <div className="results">
+              <h3>Public Repositories</h3>
+              {/* {data.map((datum, i) => {
+                return <Card key={i} repo={datum} />;
+              })} */}
+            </div>
+          </>
+        ) : (
+          <Loader />
+        )}
       </div>
     </main>
   );

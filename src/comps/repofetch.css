@@ -9,3 +9,7 @@
 .wrapper>h3 {
     margin-right: 10px;
 }
+
+.wrapper>p {
+    font-size: larger;
+}
