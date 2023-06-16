@@ -6,7 +6,14 @@ from git import Repo
 from nbconvert.exporters import PythonExporter
 import openai
 import nbformat
-import tiktoken 
+import tiktoken
+from itertools import islice
+import numpy as np
+
+
+EMBEDDING_MODEL = "text-embedding-ada-002"
+EMBEDDING_CTX_LENGTH = 2048
+EMBEDDING_ENCODING = "cl100k_base"
 
 
 non_code_extensions = (
@@ -159,16 +166,46 @@ non_code_extensions = (
     ".x3dv",  # X3D Classic VRML files
 )
 
-
 app = Flask(__name__)
+
+
+def batched(iterable, n):
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while batch := tuple(islice(it, n)):
+        yield batch
+
+
+def chunked_tokens(text, encoding_name, chunk_length):
+    encoding = tiktoken.get_encoding(encoding_name)
+    tokens = encoding.encode(text)
+    chunks_iterator = batched(tokens, chunk_length)
+    yield from chunks_iterator
+
+
+def len_safe_get_embedding(
+    text,
+    model=EMBEDDING_MODEL,
+    max_tokens=EMBEDDING_CTX_LENGTH,
+    encoding_name=EMBEDDING_ENCODING,
+):
+    chunks = []
+    chunk_lengths = []
+    for chunk in chunked_tokens(
+        text, encoding_name=encoding_name, chunk_length=max_tokens
+    ):
+        chunks.append(chunk)
+    return chunks
 
 
 # routes
 @app.route("/analyze", methods=["GET"])
 def analyze():
     github_url = request.args.get("github_url")
-    result = analyze_repositories(github_url)
-    return jsonify(result)
+    temp = preprocess_code(github_url)
+    result = divide_into_chunks(temp)
+    return jsonify({"result": len(result)})
 
 
 def fetch_repositories(github_url):
@@ -183,20 +220,35 @@ def fetch_repositories(github_url):
         )
 
 
-def preprocess_code_chunks(repo_url, max_tokens=2048):
+def preprocess_code(repo_url):
     repo_name = repo_url.split("/")[-1].split(".")[0]
     temp_dir = tempfile.mkdtemp()
     local_path = os.path.join(temp_dir, repo_name)
 
     # Clone the repository
     Repo.clone_from(repo_url, local_path)
-
     print(f"Cloned repository {repo_url} to {local_path}")
+
     # Convert Jupyter notebooks to Python scripts
     exporter = PythonExporter()
     for root, dirs, files in os.walk(local_path):
         # Ignore node_modules and directories starting with .
-        dirs[:] = [d for d in dirs if not (d.startswith(".") or d == "node_modules")]
+        dirs[:] = [
+            d
+            for d in dirs
+            if not (
+                d.startswith(".")
+                or d == "node_modules"
+                or d == "venv"
+                or d == "env"
+                or d == "virtualenv"
+                or d == "assets"
+                or d == "static"
+                or d == "build"
+                or d == "dist"
+                or d == "target"
+            )
+        ]
 
         for file in files:
             if file.endswith(".ipynb"):
@@ -207,10 +259,8 @@ def preprocess_code_chunks(repo_url, max_tokens=2048):
                 with open(file_path.replace(".ipynb", ".py"), "w") as f:
                     f.write(script)
 
-    # Read all code files and create chunks of code up to max_tokens
-    code_chunks = []
-    current_chunk = ""
-    current_tokens = 0
+    # Read all code files and concatenate their content
+    code = ""
     for root, dirs, files in os.walk(local_path):
         # Ignore node_modules and directories starting with .
         dirs[:] = [
@@ -232,6 +282,8 @@ def preprocess_code_chunks(repo_url, max_tokens=2048):
 
         for file in files:
             file_path = os.path.join(root, file)
+            print("Reading file:", file_path)
+            # Ignore asset files like images and SVGs
             if (
                 not file.lower().endswith(non_code_extensions)
                 and not file.startswith(".")
@@ -243,27 +295,17 @@ def preprocess_code_chunks(repo_url, max_tokens=2048):
                 and not is_binary(file_path)
             ):
                 with open(file_path) as f:
-                    print("Processing file:", file_path)
-                    file_code = f.read()
-                    tokens_in_file = len(file_code.split())
-
-                    if current_tokens + tokens_in_file <= max_tokens:
-                        current_chunk += f"File: {file}\n"  # Append the file name
-                        current_chunk += file_code + "\n"
-                        current_tokens += tokens_in_file
-                    else:
-                        code_chunks.append(current_chunk)
-                        current_chunk = f"File: {file}\n"  # Append the file name
-                        current_chunk += file_code + "\n"
-                        current_tokens = tokens_in_file
-
-    # Add the last chunk if it's not empty
-    if current_chunk.strip():
-        code_chunks.append(current_chunk)
-    return code_chunks
+                    code += f"File: {file}\n"  # Append the file name
+                    code += f.read().strip() + "\n"
+    return code
 
 
-def analyze_code_with_gpt(code_chunks, max_tokens=2048):
+def divide_into_chunks(code):
+    chunks = len_safe_get_embedding(text=code)
+    return chunks
+
+
+def analyze_code_with_gpt(code_chunks):
     openai.api_key = "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"
     total_complexity = 0
     analyzed_chunks = 0
@@ -299,7 +341,7 @@ def analyze_repositories(github_url):
 
     for repo in repos:
         repo_url = repo["html_url"]
-        code_chunks = preprocess_code_chunks(repo_url)
+        code_chunks = preprocess_code(repo_url)
         print(len(code_chunks), " code chunks found")
         complexity = analyze_code_with_gpt(code_chunks)
         print("Complexity score of ", repo["name"], ": ", complexity)
