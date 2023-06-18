@@ -10,7 +10,6 @@ import openai
 import nbformat
 import tiktoken
 from itertools import islice
-import numpy as np
 
 
 EMBEDDING_CTX_LENGTH = 2048
@@ -314,7 +313,7 @@ def divide_into_chunks(code):
 
 
 def analyze_code_with_gpt(code_chunks):
-    openai.api_key = "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"
+    openai.api_key = "OPENAI_API_KEY"
     total_complexity = 0
     analyzed_chunks = 0
     # Analyze each code chunk
