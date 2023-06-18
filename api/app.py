@@ -201,7 +201,7 @@ def len_safe_get_embedding(
 # routes
 @app.route("/analyze", methods=["GET"])
 def analyze():
-    print("analyze")
+    print("Analyze")
     github_url = request.args.get("username")
     # results_generator = analyze_repositories(github_url)
     return analyze_repositories(github_url), {"Content-Type": "application/x-ndjson"}
@@ -310,7 +310,6 @@ def preprocess_code(repo_url):
 
 def divide_into_chunks(code):
     chunks = len_safe_get_embedding(text=code)
-    print("Divided code into", len(chunks), "chunks")
     return chunks
 
 
@@ -320,8 +319,14 @@ def analyze_code_with_gpt(code_chunks):
     analyzed_chunks = 0
     # Analyze each code chunk
     for i, code_chunk in enumerate(code_chunks):
-        print("Analyzing code chunk: ", i + 1, " out of ", len(code_chunks))
-        print("Size of code chunk: ", len(code_chunk))
+        print(
+            "Analyzing code chunk: ",
+            i + 1,
+            " out of ",
+            len(code_chunks),
+            "of size: ",
+            len(code_chunk),
+        )
         enc = tiktoken.get_encoding(EMBEDDING_ENCODING)
         chunk_text = enc.decode(code_chunk)
         prompt = f"{chunk_text}"
@@ -339,7 +344,6 @@ def analyze_code_with_gpt(code_chunks):
             ],
         )
         try:
-            print(response.choices[0].message["content"])
             nums = [
                 int(num)
                 for num in re.findall(r"\d+", response.choices[0].message["content"])
@@ -359,7 +363,6 @@ def analyze_repositories(github_url):
     repos = fetch_repositories(github_url)
     max_complexity = -1
     most_complex_repo = None
-    gpt_analysis = ""
 
     for repo in repos:
         print("Analyzing repository: ", repo["name"])
@@ -367,21 +370,23 @@ def analyze_repositories(github_url):
         code_chunks = preprocess_code(repo_url)
         print(len(code_chunks), " code chunks found")
         complexity = analyze_code_with_gpt(code_chunks)
+        if complexity is None:
+            complexity = 0
         print("Complexity score of ", repo["name"], ": ", complexity)
-
         if complexity is not None and complexity > max_complexity:
-            max_complexity = complexity
+            max_complexity = round(complexity, 2)
             most_complex_repo = repo
-            gpt_analysis = str(round(complexity, 2))
 
-        yield json.dumps({"repository": repo["html_url"], "complexity": complexity})
-
-    yield json.dumps(
-        {
-            "most_complex_repository": most_complex_repo["html_url"],
-            "gpt_analysis": gpt_analysis,
-        }
-    )
+        yield json.dumps(
+            {
+                "repository_name": repo["name"],
+                "repository_url": repo["html_url"],
+                "complexity": complexity,
+                "most_complex_repository_name": most_complex_repo["name"],
+                "most_complex_repository_url": most_complex_repo["html_url"],
+                "max_complexity": max_complexity,
+            }
+        )
 
 
 def is_binary(file_path):

@@ -1,26 +1,21 @@
-.loader-container {
-    display: flex;
+.inline-loader-container {
+    display:    flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    width: 100vw;
-    position: fixed;
-    top: 0;
-    left: 0;
-    background-color: rgba(255, 255, 255, 0.425);
-    z-index: 1000;
+    position: relative;
+    background-color: transparent;
 }
 
-.loader {
-    display: flex;
+.inline-loader {
+    display: inline-flex;
     justify-content: center;
     align-items: center;
 }
 
-.spinner {
+.inline-spinner {
     border: 6px solid #ff4fa741;
-    width: 72px;
-    height: 72px;
+    width: 36px; /* Reduced size for inline appearance */
+    height: 36px; /* Reduced size for inline appearance */
     border-radius: 50%;
     border-top-color: #a84fff;
     animation: spin 1s ease-in-out infinite;

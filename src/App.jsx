@@ -9,36 +9,55 @@ function App() {
   const [repoToFetch, setRepoToFetch] = useState("");
   const [userName, setUserName] = useState("");
   const [data, setData] = useState([]);
-  const [userDataFetched, setUserDataFetched] = useState(false);
+  const [goldenRepo, setGoldenRepo] = useState({});
+  const [userDataFetched, setUserDataFetched] = useState(0);
+  const [analyzing, setAnalyzing] = useState(false);
+  useEffect(() => {
+    if (data.length) {
+      const last = data.length - 1;
+      setGoldenRepo({
+        repository_name: data[last].most_complex_repository_name,
+        repository_url: data[last].most_complex_repository_url,
+        complexity: data[last].max_complexity,
+      });
+    }
+  }, [data]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (search === "") return;
+    setUserDataFetched(0);
     setRepoToFetch(search);
   };
 
   const handleAnalyze = async (userName) => {
-    let result = "";
+    setAnalyzing(true);
     const decoder = new TextDecoder();
     const response = await fetch(
       `http://localhost:5000/analyze?username=${userName}`
     );
-    console.log(response);
-    // the response body is a readable stream. the api will stream the data back to the client
     const reader = response.body.getReader();
-    // read() returns a promise that resolves when a value has been received
-    const { value: chunk, done: readerDone } = await reader.read();
-    // if the stream is done, break the loop
-    if (readerDone) return;
-    // decode the received chunk
-    const chunkString = decoder.decode(chunk);
-    // append the decoded string to the result
-    result += chunkString;
-    // when we're done reading the stream, parse the result
-    const parsedResult = JSON.parse(result);
-
-    console.log(result);
+    const processChunks = async () => {
+      while (true) {
+        const { value: chunk, done: readerDone } = await reader.read();
+        if (readerDone) {
+          break;
+        }
+        const chunkString = decoder.decode(chunk);
+        try {
+          const parsedChunk = JSON.parse(chunkString);
+          setData((prev) => {
+            return [...prev, parsedChunk];
+          });
+        } catch (err) {
+          console.log(err);
+        }
+      }
+    };
+    await processChunks();
+    setAnalyzing(false);
   };
+
   return (
     <main>
       <div className="App">
@@ -70,15 +89,17 @@ function App() {
             </div>
           )}
         </header>
-        {/* {false ? (
-          <>
-            <div className="results">
-              <h3>Public Repositories</h3>
-            </div>
-          </>
-        ) : (
-          <Loader />
-        )} */}
+        {data.length ? (
+          <div className="results">
+            <h3 className="headerline">Most Complex Repo</h3>
+            <Card repo={goldenRepo} golden={true} />
+            <h3 className="headerline">Analyzed Repositories</h3>
+            {data.map((datum, i) => {
+              return <Card key={i} repo={datum} />;
+            })}
+          </div>
+        ) : null}
+        {data.length < userDataFetched && analyzing && <Loader />}
       </div>
     </main>
   );

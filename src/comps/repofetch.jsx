@@ -26,7 +26,7 @@ const FetchPublicRepos = ({ userInput, setUserDataFetched, setUserName }) => {
           throw new Error("Failed to fetch data");
         }
         const data = await response.json();
-        setUserDataFetched(true);
+        setUserDataFetched(data.public_repos);
         setPublicRepos(data.public_repos);
       } catch (error) {
         console.error("Error fetching data:", error);
