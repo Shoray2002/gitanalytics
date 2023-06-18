@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 import "./repofetch.css";
-const FetchPublicRepos = ({ userInput, setUserDataFetched }) => {
+const FetchPublicRepos = ({ userInput, setUserDataFetched, setUserName }) => {
   const [publicRepos, setPublicRepos] = useState(0);
   useEffect(() => {
     const fetchRepos = async () => {
@@ -10,14 +10,16 @@ const FetchPublicRepos = ({ userInput, setUserDataFetched }) => {
 
       if (userInput.startsWith("https://github.com/")) {
         const username = userInput.split("https://github.com/")[1];
+        setUserName(username);
         userUrl = `${baseUrl}${username}`;
       } else if (userInput.startsWith("http://github.com/")) {
         const username = userInput.split("http://github.com/")[1];
+        setUserName(username);
         userUrl = `${baseUrl}${username}`;
       } else {
+        setUserName(userInput);
         userUrl = `${baseUrl}${userInput}`;
       }
-
       try {
         const response = await fetch(userUrl);
         if (!response.ok) {
@@ -33,7 +35,7 @@ const FetchPublicRepos = ({ userInput, setUserDataFetched }) => {
     if (userInput) {
       fetchRepos();
     }
-  }, [setUserDataFetched, userInput]);
+  }, [setUserDataFetched, userInput, setUserName]);
 
   return (
     publicRepos > 0 && (

@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+import json
+from flask import Flask, Response, request, jsonify
 import re
 import requests
 import os
@@ -12,7 +13,7 @@ from itertools import islice
 import numpy as np
 
 
-EMBEDDING_CTX_LENGTH = 3800
+EMBEDDING_CTX_LENGTH = 2048
 EMBEDDING_ENCODING = "cl100k_base"
 
 
@@ -200,9 +201,18 @@ def len_safe_get_embedding(
 # routes
 @app.route("/analyze", methods=["GET"])
 def analyze():
-    github_url = request.args.get("github_url")
-    result = analyze_repositories(github_url)
-    return jsonify(result)
+    print("analyze")
+    github_url = request.args.get("username")
+    # results_generator = analyze_repositories(github_url)
+    return analyze_repositories(github_url), {"Content-Type": "application/x-ndjson"}
+
+
+def generate_json():
+    data = [{"id": i, "value": f"Item {i + 1}"} for i in range(10)]
+    for item in data:
+        item = json.dumps(item)
+        item = "".join([item, "\n"])
+        yield item
 
 
 def fetch_repositories(github_url):
@@ -350,6 +360,7 @@ def analyze_repositories(github_url):
     max_complexity = -1
     most_complex_repo = None
     gpt_analysis = ""
+
     for repo in repos:
         print("Analyzing repository: ", repo["name"])
         repo_url = repo["html_url"]
@@ -357,15 +368,20 @@ def analyze_repositories(github_url):
         print(len(code_chunks), " code chunks found")
         complexity = analyze_code_with_gpt(code_chunks)
         print("Complexity score of ", repo["name"], ": ", complexity)
+
         if complexity is not None and complexity > max_complexity:
             max_complexity = complexity
             most_complex_repo = repo
             gpt_analysis = str(round(complexity, 2))
-        break
-    return {
-        "most_complex_repository": most_complex_repo["html_url"],
-        "gpt_analysis": gpt_analysis,
-    }
+
+        yield json.dumps({"repository": repo["html_url"], "complexity": complexity})
+
+    yield json.dumps(
+        {
+            "most_complex_repository": most_complex_repo["html_url"],
+            "gpt_analysis": gpt_analysis,
+        }
+    )
 
 
 def is_binary(file_path):
